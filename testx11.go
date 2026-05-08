@@ -8,6 +8,7 @@ import (
 	"image"
 	_ "image/jpeg"
 	"os"
+	 "github.com/nfnt/resize"
 )
 
 //Объявление переменых
@@ -49,6 +50,11 @@ func GetBG(path string) (image.Image,error) {
 	}
 	return img,nil
 }
+
+func resizeBG(img image.Image,screen xproto.ScreenInfo) image.Image {
+	return resize.Resize(uint(screen.WidthInPixels),uint(screen.HeightInPixels),img,resize.NearestNeighbor)
+}
+
 func start() error {
 	var err error
 	X,err = xgb.NewConn()
