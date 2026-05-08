@@ -5,6 +5,9 @@ import (
 	"github.com/jezek/xgb/xproto" 
 	"log"
 	"fmt"
+	"image"
+	_ "image/jpeg"
+	"os"
 )
 
 //Объявление переменых
@@ -34,6 +37,18 @@ func CreateGC(X *xgb.Conn,screen *xproto.ScreenInfo) error {
 	return nil
 }
 
+func GetBG(path string) (image.Image,error) {
+	file,err := os.Open(path)
+	if err != nil {
+		return nil,fmt.Errorf("Ошибка открытия изображения!: %v",err)
+	}
+	defer file.Close()
+	img,_,err := image.Decode(file)
+	if err != nil {
+		return nil,fmt.Errorf("Ошибка при декодировании изображения!: %v",err)
+	}
+	return img,nil
+}
 func start() error {
 	var err error
 	X,err = xgb.NewConn()
