@@ -8,7 +8,9 @@ import (
 	"image"
 	_ "image/jpeg"
 	"os"
-	 "github.com/nfnt/resize"
+	"github.com/nfnt/resize"
+	"github.com/jezek/xgbutil"
+	"github.com/jezek/xgbutil/xgraphics"
 )
 
 //Объявление переменых
@@ -16,16 +18,17 @@ var X *xgb.Conn //Подключение
 var setup *xproto.SetupInfo //Ифнормация о сессии
 var screen xproto.ScreenInfo //Информация о экране
 var background xproto.Pixmap //Задний фон
-var gc xproto.Gcontext //Графический контекст
+var xbutil *xgbutil.XUtil
+var gc xproto.Gcontext
 
-func CreatePixelMap(X *xgb.Conn,screen *xproto.ScreenInfo) error {
+func CreatePixelMap(X *xgb.Conn,screen *xproto.ScreenInfo) (*xproto.Pixmap,error) {
 	var err error
 	background,err = xproto.NewPixmapId(X)
 	if err != nil {
-		return fmt.Errorf("Ошибка!: %v",err)
+		return nil,fmt.Errorf("Ошибка!: %v",err)
 	}
 	xproto.CreatePixmap(X, screen.RootDepth, background, xproto.Drawable(screen.Root),screen.WidthInPixels,screen.HeightInPixels)
-	return nil
+	return &background,nil
 }
 
 func CreateGC(X *xgb.Conn,screen *xproto.ScreenInfo) error {
@@ -51,30 +54,88 @@ func GetBG(path string) (image.Image,error) {
 	return img,nil
 }
 
-func resizeBG(img image.Image,screen xproto.ScreenInfo) image.Image {
+func resizeBG(img image.Image,screen xproto.ScreenInfo,wid xproto.Window) image.Image {
 	return resize.Resize(uint(screen.WidthInPixels),uint(screen.HeightInPixels),img,resize.NearestNeighbor)
 }
 
-func start() error {
+func changeFormatBG(img image.Image,X *xgb.Conn) (*xgraphics.Image,error) {
+	ximg:= xgraphics.NewConvert(xbutil,img)
+	return ximg,nil
+
+}
+
+func DrawBackground(ximg []uint8,y int16) {
+	xproto.PutImage(
+		X,
+		xproto.ImageFormatZPixmap,
+		xproto.Drawable(background),
+		gc,
+		screen.WidthInPixels,
+		8,
+		0,y,
+		0,
+		screen.RootDepth,
+		ximg,
+	)
+}
+
+func DrawAllBG(ximg xgraphics.Image) {
+	packageSize := 7680 * 8
+	totalSize := len(ximg.Pix)
+	y := 0
+	for start := 0;start < totalSize;start += packageSize {
+		end := start + packageSize
+		DrawBackground(ximg.Pix[start:end],int16(y))
+		y += 8
+		fmt.Println("Итерация закончена!")
+	}
+}
+
+func CreateBG(X *xgb.Conn, screen xproto.ScreenInfo, path string,wid xproto.Window) error {
+	_,err := CreatePixelMap(X,&screen)
+	if err != nil {
+		return fmt.Errorf("Ошибка при создании pixmap!: %v",err)
+	}
+
+	err2 := CreateGC(X,&screen)
+	if err2 != nil {
+		log.Println("Ошибка!: %v",err2)
+	}
+
+	img,err := GetBG(path)
+	if err != nil {
+		return fmt.Errorf("Ошибка при чтении файла заднего фона!: %v",err)
+	}
+
+	rimg := resizeBG(img,screen,wid)
+
+	ximg,err := changeFormatBG(rimg,X)
+	if err != nil {
+		return fmt.Errorf("Ошибка при изменении формата заднего фона!: %v",err)
+	}
+
+	DrawAllBG(*ximg)
+
+	return  nil
+}
+
+
+func start() (xproto.Window,error) {
 	var err error
 	X,err = xgb.NewConn()
+	xbutil,err = xgbutil.NewConnXgb(X)
 	if err != nil {
-		return fmt.Errorf("Не удалось подключиться!: %v",err)
+		return 0,fmt.Errorf("Не удалось подключиться!: %v",err)
 	}
 	setup = xproto.Setup(X)
 	screen = setup.Roots[0]
 
 	wid,err := xproto.NewWindowId(X)
 	if err != nil {
-		return fmt.Errorf("Проблема с id!: %v",err)
+		return 0,fmt.Errorf("Проблема с id!: %v",err)
 	}
 
-
-	err2 := CreatePixelMap(X,&screen)
-	if err2 != nil {
-		return fmt.Errorf("Ошибка!: %v",err2)
-	}
-	
+	CreateBG(X,screen,"background.jpg",wid)
 	xproto.CreateWindow(
 		X,
 		screen.RootDepth,
@@ -86,19 +147,19 @@ func start() error {
 		xproto.WindowClassInputOutput,
 		screen.RootVisual,
 
-		xproto.CwBackPixel | xproto.CwEventMask,
+		xproto.CwBackPixmap | xproto.CwEventMask,
 		[]uint32{
-			screen.WhitePixel,
+			uint32(background),
 			xproto.EventMaskExposure | xproto.EventMaskKeyPress,
 		},
 	)
 	
 	xproto.MapWindow(X,wid)
-	return nil
+	return wid,nil
 }
 
 func main() {
-	err := start()
+	_,err := start()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -106,11 +167,10 @@ func main() {
 	
 	
 	for {
-		ev,err := X.WaitForEvent()
+		_,err := X.WaitForEvent()
 		if err != nil {
 			log.Fatal("Ошибка!",err)
 			return
-		}
-		fmt.Println(ev)
+		}	
 	}
 }
