@@ -96,6 +96,7 @@ func CreateBG(CI *ConnInfo, path string) (xproto.Pixmap,error) {
 	if err2 != nil {
 		log.Printf("Ошибка!: %v",err2)
 	}
+	defer xproto.FreeGC(CI.Conn,gc)
 
 	img,err := GetBG(path)
 	if err != nil {
@@ -163,6 +164,7 @@ func CreateWindow(CI *ConnInfo) (error){
 		},
 	)
 	
+	defer xproto.FreePixmap(CI.Conn,background) 
 	xproto.MapWindow(CI.Conn,wid)
 	return nil
 }
