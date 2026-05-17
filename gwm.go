@@ -118,6 +118,20 @@ func CreateBG(CI *ConnInfo, path string) (xproto.Pixmap,error) {
 	return  background,nil
 }
 
+func GetKeyMap(CI *ConnInfo) (*xproto.GetKeyboardMappingReply,error) {
+	minCode := CI.Setup.MinKeycode
+	maxCode := CI.Setup.MaxKeycode
+	count := byte(maxCode - minCode + 1)
+
+	reply,err := xproto.GetKeyboardMapping(CI.Conn,minCode,count).Reply()
+	if err != nil {
+		return nil,fmt.Errorf("Ошибка %v",err)
+	}
+
+	return reply,nil
+}
+
+
 func Connect() ConnInfo{
 	conn,err := xgb.NewConn()
 	if err != nil {
@@ -148,7 +162,7 @@ func CreateWindow(CI *ConnInfo) (error){
 		return fmt.Errorf("Проблема с id!: %v",err)
 	}
 
-	background,err := CreateBG(CI,"./backgrounds/bg1.jpg")
+	background,err := CreateBG(CI,"/home/mark/VSCodeProjects/GWM/backgrounds/bg1.jpg")
 	if err != nil {
 		log.Printf("Ошибка! %v",err)
 	}
