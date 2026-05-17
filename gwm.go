@@ -11,7 +11,10 @@ import (
 	"github.com/nfnt/resize"
 	"github.com/jezek/xgbutil"
 	"github.com/jezek/xgbutil/xgraphics"
+	"sync"
 )
+
+var wg sync.WaitGroup
 
 type ConnInfo struct {
 	Conn *xgb.Conn
@@ -73,6 +76,7 @@ func DrawBackground(CI *ConnInfo,ximg []uint8,y int16,gc xproto.Gcontext,backgro
 		CI.Screen.RootDepth,
 		ximg,
 	)
+	wg.Done()
 }
 
 func DrawAllBG(CI *ConnInfo,ximg xgraphics.Image,gc xproto.Gcontext,background xproto.Pixmap) {
@@ -80,10 +84,12 @@ func DrawAllBG(CI *ConnInfo,ximg xgraphics.Image,gc xproto.Gcontext,background x
 	totalSize := len(ximg.Pix)
 	y := 0
 	for start := 0;start < totalSize;start += packageSize {
+		wg.Add(1)
 		end := start + packageSize
-		DrawBackground(CI,ximg.Pix[start:end],int16(y),gc,background)
+		go DrawBackground(CI,ximg.Pix[start:end],int16(y),gc,background)
 		y += 8
 	}
+	wg.Wait()
 }
 
 func CreateBG(CI *ConnInfo, path string) (xproto.Pixmap,error) {
