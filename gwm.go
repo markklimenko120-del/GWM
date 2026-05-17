@@ -8,6 +8,7 @@ import (
 	_ "image/jpeg"
 	_ "image/png"
 	"os"
+	"os/exec"
 	"github.com/nfnt/resize"
 	"github.com/jezek/xgbutil"
 	"github.com/jezek/xgbutil/xgraphics"
@@ -232,10 +233,23 @@ func main() {
 	fmt.Print(keycode)
 
 	for {
-		_,err := CI.Conn.WaitForEvent()
+		ev,err := CI.Conn.WaitForEvent()
 		if err != nil {
 			log.Fatal("Ошибка!",err)
 			return
 		}	
+
+		switch event := ev.(type) {
+		case xproto.KeyPressEvent:
+			if keycode == event.Detail {
+				_,err := exec.LookPath("kitty")
+				if err != nil {
+					log.Fatal(err)
+				}
+				term := exec.Command("kitty")
+				term.Run()
+				fmt.Print("ОК")
+			}
+		}
 	}
 }
