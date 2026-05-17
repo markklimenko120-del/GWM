@@ -23,6 +23,15 @@ type ConnInfo struct {
 	Screen xproto.ScreenInfo
 }
 
+const (
+	XK_Shift_L = 0xffe1  /* Left shift */
+   	XK_Shift_R = 0xffe2  /* Right shift */
+   	XK_Control_L = 0xffe3  /* Left control */
+   	XK_Control_R = 0xffe4  /* Right control */
+   	XK_Caps_Lock = 0xffe5  /* Caps lock */
+   	XK_Shift_Lock = 0xffe6  /* Shift lock */
+)
+
 func CreatePixelMap(CI *ConnInfo) (xproto.Pixmap,error) {
 	background,err := xproto.NewPixmapId(CI.Conn)
 	if err != nil {
@@ -131,6 +140,24 @@ func GetKeyMap(CI *ConnInfo) (*xproto.GetKeyboardMappingReply,error) {
 	return reply,nil
 }
 
+func CheckKeyCode(CI *ConnInfo, reply *xproto.GetKeyboardMappingReply,keysum uint32) xproto.Keycode {
+	perCode := int(reply.KeysymsPerKeycode)
+	minCode := CI.Setup.MinKeycode
+
+	for i:= 0;i < len(reply.Keysyms);i += perCode {
+		currentKeyCode := minCode + xproto.Keycode(i/perCode)
+
+		for j:=0; j < perCode;j++ {
+			sym := reply.Keysyms[i+j]
+
+			if uint32(sym) == keysum {
+				return xproto.Keycode(currentKeyCode)
+			}
+		}
+	}
+	return 0
+}
+
 
 func Connect() ConnInfo{
 	conn,err := xgb.NewConn()
@@ -195,6 +222,14 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	reply,err := GetKeyMap(&CI)
+	if err != nil {
+		log.Fatal("Ошибка!",err)
+	}
+
+	keycode := CheckKeyCode(&CI,reply,XK_Caps_Lock)
+	fmt.Print(keycode)
 
 	for {
 		_,err := CI.Conn.WaitForEvent()
