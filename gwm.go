@@ -55,7 +55,7 @@ func GetBG(path string) (image.Image,error) {
 }
 
 func resizeBG(img image.Image,CI *ConnInfo) image.Image {
-	return resize.Resize(uint(CI.Screen.WidthInPixels),uint(CI.Screen.HeightInPixels),img,resize.NearestNeighbor)
+	return resize.Resize(uint(CI.Screen.WidthInPixels),uint(CI.Screen.HeightInPixels),img,resize.Lanczos3)
 }
 
 func changeFormatBG(img image.Image,CI *ConnInfo) (*xgraphics.Image) {
@@ -148,7 +148,7 @@ func CreateWindow(CI *ConnInfo) (error){
 		return fmt.Errorf("Проблема с id!: %v",err)
 	}
 
-	background,err := CreateBG(CI,"./backgrounds/background.jpg")
+	background,err := CreateBG(CI,"./backgrounds/bg1.jpg")
 	if err != nil {
 		log.Printf("Ошибка! %v",err)
 	}
