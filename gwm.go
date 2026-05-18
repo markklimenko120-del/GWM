@@ -1,18 +1,21 @@
 package main
+
 import (
-	"github.com/jezek/xgb" 
-	"github.com/jezek/xgb/xproto" 
-	"log"
 	"fmt"
 	"image"
 	_ "image/jpeg"
 	_ "image/png"
+	"log"
 	"os"
 	"os/exec"
-	"github.com/nfnt/resize"
+	"sync"
+	"gwm/config"
+	"github.com/jezek/xgb"
+	"github.com/jezek/xgb/xproto"
 	"github.com/jezek/xgbutil"
 	"github.com/jezek/xgbutil/xgraphics"
-	"sync"
+	"github.com/nfnt/resize"
+	// "golang.org/x/tools/go/cfg"
 )
 
 var wg sync.WaitGroup
@@ -184,13 +187,12 @@ func Connect() ConnInfo{
 	return CI
 }
 
-func CreateWindow(CI *ConnInfo) (error){
+func CreateWindow(CI *ConnInfo,cfg *config.Config) (error){
 	wid,err := xproto.NewWindowId(CI.Conn)
 	if err != nil {
 		return fmt.Errorf("Проблема с id!: %v",err)
 	}
-
-	background,err := CreateBG(CI,"/home/mark/VSCodeProjects/GWM/backgrounds/bg1.jpg")
+	background,err := CreateBG(CI,cfg.BackgroundPath)
 	if err != nil {
 		log.Printf("Ошибка! %v",err)
 	}
@@ -217,9 +219,15 @@ func CreateWindow(CI *ConnInfo) (error){
 	return nil
 }
 
+func ConfigLoad() *config.Config{
+	cfg := config.MustLoad()
+	return cfg
+}
+
 func main() {
+	cfg := ConfigLoad()
 	CI := Connect()
-	err := CreateWindow(&CI)
+	err := CreateWindow(&CI,cfg)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -242,11 +250,11 @@ func main() {
 		switch event := ev.(type) {
 		case xproto.KeyPressEvent:
 			if keycode == event.Detail {
-				_,err := exec.LookPath("kitty")
+				_,err := exec.LookPath(cfg.TerminalConfig.Terminal)
 				if err != nil {
 					log.Fatal(err)
 				}
-				term := exec.Command("kitty")
+				term := exec.Command(cfg.TerminalConfig.Terminal)
 				term.Run()
 				fmt.Print("ОК")
 			}
