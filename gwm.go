@@ -8,6 +8,7 @@ import (
 	_ "image/jpeg"
 	_ "image/png"
 	"os"
+	"os/exec"
 	"github.com/nfnt/resize"
 	"github.com/jezek/xgbutil"
 	"github.com/jezek/xgbutil/xgraphics"
@@ -22,6 +23,15 @@ type ConnInfo struct {
 	Setup *xproto.SetupInfo
 	Screen xproto.ScreenInfo
 }
+
+const (
+	XK_Shift_L = 0xffe1  /* Left shift */
+   	XK_Shift_R = 0xffe2  /* Right shift */
+   	XK_Control_L = 0xffe3  /* Left control */
+   	XK_Control_R = 0xffe4  /* Right control */
+   	XK_Caps_Lock = 0xffe5  /* Caps lock */
+   	XK_Shift_Lock = 0xffe6  /* Shift lock */
+)
 
 func CreatePixelMap(CI *ConnInfo) (xproto.Pixmap,error) {
 	background,err := xproto.NewPixmapId(CI.Conn)
@@ -118,6 +128,38 @@ func CreateBG(CI *ConnInfo, path string) (xproto.Pixmap,error) {
 	return  background,nil
 }
 
+func GetKeyMap(CI *ConnInfo) (*xproto.GetKeyboardMappingReply,error) {
+	minCode := CI.Setup.MinKeycode
+	maxCode := CI.Setup.MaxKeycode
+	count := byte(maxCode - minCode + 1)
+
+	reply,err := xproto.GetKeyboardMapping(CI.Conn,minCode,count).Reply()
+	if err != nil {
+		return nil,fmt.Errorf("Ошибка %v",err)
+	}
+
+	return reply,nil
+}
+
+func CheckKeyCode(CI *ConnInfo, reply *xproto.GetKeyboardMappingReply,keysum uint32) xproto.Keycode {
+	perCode := int(reply.KeysymsPerKeycode)
+	minCode := CI.Setup.MinKeycode
+
+	for i:= 0;i < len(reply.Keysyms);i += perCode {
+		currentKeyCode := minCode + xproto.Keycode(i/perCode)
+
+		for j:=0; j < perCode;j++ {
+			sym := reply.Keysyms[i+j]
+
+			if uint32(sym) == keysum {
+				return xproto.Keycode(currentKeyCode)
+			}
+		}
+	}
+	return 0
+}
+
+
 func Connect() ConnInfo{
 	conn,err := xgb.NewConn()
 	if err != nil {
@@ -148,7 +190,7 @@ func CreateWindow(CI *ConnInfo) (error){
 		return fmt.Errorf("Проблема с id!: %v",err)
 	}
 
-	background,err := CreateBG(CI,"./backgrounds/bg1.jpg")
+	background,err := CreateBG(CI,"/home/mark/VSCodeProjects/GWM/backgrounds/bg1.jpg")
 	if err != nil {
 		log.Printf("Ошибка! %v",err)
 	}
@@ -182,11 +224,32 @@ func main() {
 		log.Fatal(err)
 	}
 
+	reply,err := GetKeyMap(&CI)
+	if err != nil {
+		log.Fatal("Ошибка!",err)
+	}
+
+	keycode := CheckKeyCode(&CI,reply,XK_Caps_Lock)
+	fmt.Print(keycode)
+
 	for {
-		_,err := CI.Conn.WaitForEvent()
+		ev,err := CI.Conn.WaitForEvent()
 		if err != nil {
 			log.Fatal("Ошибка!",err)
 			return
 		}	
+
+		switch event := ev.(type) {
+		case xproto.KeyPressEvent:
+			if keycode == event.Detail {
+				_,err := exec.LookPath("kitty")
+				if err != nil {
+					log.Fatal(err)
+				}
+				term := exec.Command("kitty")
+				term.Run()
+				fmt.Print("ОК")
+			}
+		}
 	}
 }
