@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"gwm/config"
 	"image"
 	_ "image/jpeg"
 	_ "image/png"
@@ -9,16 +10,17 @@ import (
 	"os"
 	"os/exec"
 	"sync"
-	"gwm/config"
 	"github.com/jezek/xgb"
 	"github.com/jezek/xgb/xproto"
 	"github.com/jezek/xgbutil"
+	"github.com/jezek/xgbutil/xevent"
 	"github.com/jezek/xgbutil/xgraphics"
 	"github.com/nfnt/resize"
-	// "golang.org/x/tools/go/cfg"
 )
 
 var wg sync.WaitGroup
+var keycode xproto.Keycode
+var cfg *config.Config
 
 type ConnInfo struct {
 	Conn *xgb.Conn
@@ -163,7 +165,7 @@ func CheckKeyCode(CI *ConnInfo, reply *xproto.GetKeyboardMappingReply,keysum uin
 }
 
 
-func Connect() ConnInfo{
+func CreateConnect() ConnInfo{
 	conn,err := xgb.NewConn()
 	if err != nil {
 		log.Printf("Ошибка! %v\n",err)
@@ -187,15 +189,18 @@ func Connect() ConnInfo{
 	return CI
 }
 
-func CreateWindow(CI *ConnInfo,cfg *config.Config) (error){
+func CreateWindow(CI *ConnInfo,cfg *config.Config) (xproto.Window,error){
 	wid,err := xproto.NewWindowId(CI.Conn)
 	if err != nil {
-		return fmt.Errorf("Проблема с id!: %v",err)
+		return wid,fmt.Errorf("Проблема с id!: %v",err)
 	}
 	background,err := CreateBG(CI,cfg.BackgroundPath)
 	if err != nil {
 		log.Printf("Ошибка! %v",err)
 	}
+
+	evMask := uint32(xproto.EventMaskKeyPress | xproto.EventMaskEnterWindow)
+
 	xproto.CreateWindow(
 		CI.Conn,
 		CI.Screen.RootDepth,
@@ -207,16 +212,16 @@ func CreateWindow(CI *ConnInfo,cfg *config.Config) (error){
 		xproto.WindowClassInputOutput,
 		CI.Screen.RootVisual,
 
-		xproto.CwBackPixmap | xproto.CwEventMask,
+		xproto.CwBackPixmap | xproto.CwEventMask | xproto.CwEventMask,
 		[]uint32{
 			uint32(background),
-			xproto.EventMaskExposure | xproto.EventMaskKeyPress,
+			xproto.EventMaskExposure | xproto.EventMaskKeyPress | evMask,
 		},
 	)
 	
 	defer xproto.FreePixmap(CI.Conn,background) 
 	xproto.MapWindow(CI.Conn,wid)
-	return nil
+	return wid,nil
 }
 
 func ConfigLoad() *config.Config{
@@ -224,10 +229,19 @@ func ConfigLoad() *config.Config{
 	return cfg
 }
 
+func EventChecker(CI *ConnInfo,wid xproto.Window) {
+	xevent.KeyPressFun(func(xu *xgbutil.XUtil, event xevent.KeyPressEvent) {
+		if event.Detail == keycode {
+			term := exec.Command(cfg.TerminalConfig.Terminal)
+			term.Run()
+		}
+	}).Connect(CI.XConn,wid)
+}
+
 func main() {
-	cfg := ConfigLoad()
-	CI := Connect()
-	err := CreateWindow(&CI,cfg)
+	cfg = ConfigLoad()
+	CI := CreateConnect()
+	wid,err := CreateWindow(&CI,cfg)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -237,27 +251,7 @@ func main() {
 		log.Fatal("Ошибка!",err)
 	}
 
-	keycode := CheckKeyCode(&CI,reply,XK_Caps_Lock)
-	fmt.Print(keycode)
-
-	for {
-		ev,err := CI.Conn.WaitForEvent()
-		if err != nil {
-			log.Fatal("Ошибка!",err)
-			return
-		}	
-
-		switch event := ev.(type) {
-		case xproto.KeyPressEvent:
-			if keycode == event.Detail {
-				_,err := exec.LookPath(cfg.TerminalConfig.Terminal)
-				if err != nil {
-					log.Fatal(err)
-				}
-				term := exec.Command(cfg.TerminalConfig.Terminal)
-				term.Run()
-				fmt.Print("ОК")
-			}
-		}
-	}
+	keycode = CheckKeyCode(&CI,reply,XK_Caps_Lock)
+	EventChecker(&CI,wid)
+	xevent.Main(CI.XConn)
 }
