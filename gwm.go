@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"sync"
+
 	"github.com/jezek/xgb"
 	"github.com/jezek/xgb/xproto"
 	"github.com/jezek/xgbutil"
@@ -18,7 +19,7 @@ import (
 	"github.com/nfnt/resize"
 )
 
-var wg sync.WaitGroup
+var wg sync.WaitGroup 
 var keycode xproto.Keycode
 var cfg *config.Config
 
@@ -29,14 +30,6 @@ type ConnInfo struct {
 	Screen xproto.ScreenInfo
 }
 
-const (
-	XK_Shift_L = 0xffe1  /* Left shift */
-   	XK_Shift_R = 0xffe2  /* Right shift */
-   	XK_Control_L = 0xffe3  /* Left control */
-   	XK_Control_R = 0xffe4  /* Right control */
-   	XK_Caps_Lock = 0xffe5  /* Caps lock */
-   	XK_Shift_Lock = 0xffe6  /* Shift lock */
-)
 
 func CreatePixelMap(CI *ConnInfo) (xproto.Pixmap,error) {
 	background,err := xproto.NewPixmapId(CI.Conn)
@@ -47,7 +40,7 @@ func CreatePixelMap(CI *ConnInfo) (xproto.Pixmap,error) {
 	return background,nil
 }
 
-func CreateGC(CI *ConnInfo) (xproto.Gcontext,error) {
+func CreateGCtx(CI *ConnInfo) (xproto.Gcontext,error) {
 	gc,err := xproto.NewGcontextId(CI.Conn)
 	if err != nil {
 		return gc,fmt.Errorf("Ошибка GC!: %v",err)
@@ -113,7 +106,7 @@ func CreateBG(CI *ConnInfo, path string) (xproto.Pixmap,error) {
 		return background,fmt.Errorf("Ошибка при создании pixmap!: %v",err)
 	}
 
-	gc,err2 := CreateGC(CI)
+	gc,err2 := CreateGCtx(CI)
 	if err2 != nil {
 		log.Printf("Ошибка!: %v",err2)
 	}
@@ -189,59 +182,92 @@ func CreateConnect() ConnInfo{
 	return CI
 }
 
-func CreateWindow(CI *ConnInfo,cfg *config.Config) (xproto.Window,error){
-	wid,err := xproto.NewWindowId(CI.Conn)
-	if err != nil {
-		return wid,fmt.Errorf("Проблема с id!: %v",err)
-	}
+func ChangeScreenRoot(CI *ConnInfo) (xproto.Window,error){
 	background,err := CreateBG(CI,cfg.BackgroundPath)
-	if err != nil {
-		log.Printf("Ошибка! %v",err)
-	}
+ 	if err != nil {
+ 		log.Printf("Ошибка! %v",err)
+ 	}
 
-	evMask := uint32(xproto.EventMaskKeyPress | xproto.EventMaskEnterWindow)
-
-	xproto.CreateWindow(
-		CI.Conn,
-		CI.Screen.RootDepth,
-		wid,
-		CI.Screen.Root,
-		0,0,
-		CI.Screen.WidthInPixels,CI.Screen.HeightInPixels,
-		0,
-		xproto.WindowClassInputOutput,
-		CI.Screen.RootVisual,
-
-		xproto.CwBackPixmap | xproto.CwEventMask | xproto.CwEventMask,
-		[]uint32{
+	evMask := uint32(xproto.CwBackPixmap | xproto.CwEventMask)
+	root_vallist := []uint32{
 			uint32(background),
-			xproto.EventMaskExposure | xproto.EventMaskKeyPress | evMask,
-		},
-	)
+			xproto.EventMaskExposure | xproto.EventMaskKeyPress | xproto.EventMaskSubstructureRedirect,
+		}
+	xproto.ChangeWindowAttributes(CI.Conn,CI.Screen.Root,evMask,root_vallist)
+	xproto.ClearArea(CI.Conn,false,CI.Screen.Root,0,0,CI.Screen.WidthInPixels,CI.Screen.HeightInPixels)
+
+
 	
-	defer xproto.FreePixmap(CI.Conn,background) 
-	xproto.MapWindow(CI.Conn,wid)
-	return wid,nil
+	return CI.Screen.Root,nil
 }
 
+func raiseWindow(CI *ConnInfo,wid xproto.Window)  {
+	mask := uint16(xproto.ConfigWindowStackMode)
+	valist := []uint32{
+		uint32(xproto.StackModeAbove),
+	}
+	fmt.Print("Окно!\n")
+	xproto.ConfigureWindowChecked(CI.Conn,wid,mask,valist).Check()
+}
+
+func FocusOn(CI *ConnInfo,wid xproto.Window) {
+	times := xproto.Timestamp(xproto.TimeCurrentTime)
+
+	xproto.SetInputFocusChecked(CI.Conn,xproto.InputFocusParent,wid,times)
+}
+
+
 func ConfigLoad() *config.Config{
-	cfg := config.MustLoad()
+	cfg,err := config.LoadConfig("/home/mark/VSCodeProjects/GWM/config.yaml")
+	if err != nil {
+		log.Fatalf("Ошибка загрузки конфига! %v",err)
+	}
 	return cfg
 }
 
+func ChangeNewWindowAttr(CI *ConnInfo,wid xproto.Window) {
+	mask := uint32(xproto.CwEventMask)
+	valist := []uint32{
+		uint32(xproto.EventMaskEnterWindow),
+	}
+
+	xproto.ChangeWindowAttributes(CI.Conn,wid,mask,valist)
+	xevent.EnterNotifyFun(func(xu *xgbutil.XUtil,event xevent.EnterNotifyEvent) {
+		raiseWindow(CI,wid)
+		FocusOn(CI,wid)
+	}).Connect(CI.XConn,wid)	
+
+	xproto.MapWindow(CI.Conn,wid)
+}
+
 func EventChecker(CI *ConnInfo,wid xproto.Window) {
+	//KeyPress Callback
 	xevent.KeyPressFun(func(xu *xgbutil.XUtil, event xevent.KeyPressEvent) {
-		if event.Detail == keycode {
+		if event.Detail == keycode || uint16(event.State)&xproto.ModMaskShift != 0 {
 			term := exec.Command(cfg.TerminalConfig.Terminal)
-			term.Run()
+
+			term.Stdout = nil
+			term.Stdin = nil
+			term.Stderr = nil
+
+			term.Start()
+			
+			go func() {
+				_ = term.Wait()
+			}()
 		}
+	}).Connect(CI.XConn,wid)
+
+	//Window Creating
+	xevent.MapRequestFun(func(xu *xgbutil.XUtil,event xevent.MapRequestEvent) {
+		ChangeNewWindowAttr(CI,event.Window)
 	}).Connect(CI.XConn,wid)
 }
 
 func main() {
 	cfg = ConfigLoad()
 	CI := CreateConnect()
-	wid,err := CreateWindow(&CI,cfg)
+	wid,err := ChangeScreenRoot(&CI)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -251,7 +277,7 @@ func main() {
 		log.Fatal("Ошибка!",err)
 	}
 
-	keycode = CheckKeyCode(&CI,reply,XK_Caps_Lock)
+	keycode = CheckKeyCode(&CI,reply,cfg.TerminalConfig.TermHotKey)
 	EventChecker(&CI,wid)
 	xevent.Main(CI.XConn)
 }

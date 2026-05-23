@@ -1,4 +1,4 @@
-bgpath: "./backgrounds/bg1.jpg" #Your background image path
+bgpath: "/home/mark/VSCodeProjects/GWM/backgrounds/bg1.jpg" #Your background image path
 termcfg:
   terminal: "kitty" #Your Terminal
-  termhotkey: [0xffe9,0xffe1 ] #HotKey to open your terminal
+  termhotkey: 0xffe3 #HotKey to open your terminal
