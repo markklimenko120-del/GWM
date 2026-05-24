@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"sync"
+	"syscall"
 
 	"github.com/jezek/xgb"
 	"github.com/jezek/xgb/xproto"
@@ -240,21 +241,27 @@ func ChangeNewWindowAttr(CI *ConnInfo,wid xproto.Window) {
 	xproto.MapWindow(CI.Conn,wid)
 }
 
+func spawn() {
+	term := exec.Command(cfg.TerminalConfig.Terminal)
+
+	term.SysProcAttr = &syscall.SysProcAttr{
+		Setsid: true,
+	}
+
+	term.ExtraFiles = nil
+	term.Env = os.Environ()
+	term.Start()
+
+	go func() {
+		term.Wait()
+	}()
+}
+
 func EventChecker(CI *ConnInfo,wid xproto.Window) {
 	//KeyPress Callback
 	xevent.KeyPressFun(func(xu *xgbutil.XUtil, event xevent.KeyPressEvent) {
 		if event.Detail == keycode || uint16(event.State)&xproto.ModMaskShift != 0 {
-			term := exec.Command(cfg.TerminalConfig.Terminal)
-
-			term.Stdout = nil
-			term.Stdin = nil
-			term.Stderr = nil
-
-			term.Start()
-			
-			go func() {
-				_ = term.Wait()
-			}()
+			spawn()
 		}
 	}).Connect(CI.XConn,wid)
 
