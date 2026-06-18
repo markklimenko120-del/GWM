@@ -9,8 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"sync"
-	"syscall"
-	"unsafe"
 	"github.com/jezek/xgb"
 	// "github.com/jezek/xgb/shm"
 	"github.com/jezek/xgb/xproto"
