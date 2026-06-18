@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"gwm/config"
 	"image"
 	_ "image/jpeg"
@@ -11,8 +10,9 @@ import (
 	"os/exec"
 	"sync"
 	"syscall"
-
+	"unsafe"
 	"github.com/jezek/xgb"
+	// "github.com/jezek/xgb/shm"
 	"github.com/jezek/xgb/xproto"
 	"github.com/jezek/xgbutil"
 	"github.com/jezek/xgbutil/xevent"
@@ -23,6 +23,7 @@ import (
 var wg sync.WaitGroup 
 var keycode xproto.Keycode
 var cfg *config.Config
+var Errors = make(chan error,10)
 
 type ConnInfo struct {
 	Conn *xgb.Conn
@@ -32,35 +33,42 @@ type ConnInfo struct {
 }
 
 
-func CreatePixelMap(CI *ConnInfo) (xproto.Pixmap,error) {
+func CreatePixelMap(CI *ConnInfo,logfile *os.File) (xproto.Pixmap) {
 	background,err := xproto.NewPixmapId(CI.Conn)
 	if err != nil {
-		return background,fmt.Errorf("Ошибка!: %v",err)
+		logfile.WriteString(err.Error())
+		Errors <- err
+		return background
 	}
 	xproto.CreatePixmap(CI.Conn, CI.Screen.RootDepth, background, xproto.Drawable(CI.Screen.Root),CI.Screen.WidthInPixels,CI.Screen.HeightInPixels)
-	return background,nil
+	return background
 }
 
-func CreateGCtx(CI *ConnInfo) (xproto.Gcontext,error) {
+func CreateGCtx(CI *ConnInfo,logfile *os.File) xproto.Gcontext {
 	gc,err := xproto.NewGcontextId(CI.Conn)
 	if err != nil {
-		return gc,fmt.Errorf("Ошибка GC!: %v",err)
+		Errors <- err
+		logfile.WriteString(err.Error())
+		return gc
 	}
 	xproto.CreateGC(CI.Conn,gc,xproto.Drawable(CI.Screen.Root),0,[]uint32{})
-	return gc,nil
+	return gc
 }
 
-func GetBG(path string) (image.Image,error) {
+func GetBG(path string,logfile *os.File) image.Image {
 	file,err := os.Open(path)
 	if err != nil {
-		return nil,fmt.Errorf("Ошибка открытия изображения!: %v",err)
+		Errors <- err
+		return nil
 	}
 	defer file.Close()
 	img,_,err := image.Decode(file)
 	if err != nil {
-		return nil,fmt.Errorf("Ошибка при декодировании изображения!: %v",err)
+		logfile.WriteString(err.Error())
+		Errors <- err
+		return nil
 	}
-	return img,nil
+	return img
 }
 
 func resizeBG(img image.Image,CI *ConnInfo) image.Image {
@@ -72,72 +80,117 @@ func changeFormatBG(img image.Image,CI *ConnInfo) (*xgraphics.Image) {
 	return ximg
 }
 
-func DrawBackground(CI *ConnInfo,ximg []uint8,y int16,gc xproto.Gcontext,background xproto.Pixmap) {
-	xproto.PutImage(
-		CI.Conn,
-		xproto.ImageFormatZPixmap,
-		xproto.Drawable(background),
-		gc,
-		CI.Screen.WidthInPixels,
-		8,
-		0,y,
-		0,
-		CI.Screen.RootDepth,
-		ximg,
-	)
-	wg.Done()
-}
+// func DrawBackground(CI *ConnInfo,ximg []uint8,y int16,gc xproto.Gcontext,background xproto.Pixmap,logfile *os.File) {
+// 	cookie := xproto.PutImageChecked(
+// 		CI.Conn,
+// 		xproto.ImageFormatZPixmap,
+// 		xproto.Drawable(background),
+// 		gc,
+// 		CI.Screen.WidthInPixels,
+// 		8,
+// 		0,y,
+// 		0,
+// 		CI.Screen.RootDepth,
+// 		ximg,
+// 	).Check()
+// 	if cookie != nil {
+// 		logfile.WriteString(cookie.Error())
+// 		Errors <- cookie
+// 	}
+// 	wg.Done()
+// }
 
-func DrawAllBG(CI *ConnInfo,ximg xgraphics.Image,gc xproto.Gcontext,background xproto.Pixmap) {
-	packageSize := 7680 * 8
-	totalSize := len(ximg.Pix)
-	y := 0
-	for start := 0;start < totalSize;start += packageSize {
-		wg.Add(1)
-		end := start + packageSize
-		go DrawBackground(CI,ximg.Pix[start:end],int16(y),gc,background)
-		y += 8
-	}
-	wg.Wait()
-}
+// func DrawAllBG(CI *ConnInfo,ximg xgraphics.Image,gc xproto.Gcontext,background xproto.Pixmap,logfile *os.File) {
+// 	packageSize := 7680 * 8
+// 	totalSize := len(ximg.Pix)
+// 	y := 0
+// 	for start := 0;start < totalSize;start += packageSize {
+// 		wg.Add(1)
+// 		end := start + packageSize
+// 		go DrawBackground(CI,ximg.Pix[start:end],int16(y),gc,background,logfile)
+// 		y += 8
+// 	}
+// 	wg.Wait()
+// }
 
-func CreateBG(CI *ConnInfo, path string) (xproto.Pixmap,error) {
-	background,err := CreatePixelMap(CI)
-	if err != nil {
-		return background,fmt.Errorf("Ошибка при создании pixmap!: %v",err)
-	}
+//func PutImage(CI *ConnInfo,ximg []uint8,y int16, gc xproto.Gcontext,background xproto.Pixmap,logfile *os.File)
 
-	gc,err2 := CreateGCtx(CI)
-	if err2 != nil {
-		log.Printf("Ошибка!: %v",err2)
-	}
-	defer xproto.FreeGC(CI.Conn,gc)
+// func initSHM(CI *ConnInfo,logfile *os.File) {
+// 	err := shm.Init(CI.Conn)
+// 	if err != nil {
+// 		logfile.WriteString("Ошибка инициализации SHM!")
+// 	}
+// 	return
+// }
 
-	img,err := GetBG(path)
-	if err != nil {
-		return background,fmt.Errorf("Ошибка при чтении файла заднего фона!: %v",err)
-	}
+// func createSHM(CI *ConnInfo, background xproto.Pixmap, gc xproto.Gcontext, logfile *os.File, ximg *xgraphics.Image) {
+// 	size := CI.Screen.WidthInPixels * CI.Screen.HeightInPixels * 4
+// 	shmid, _, err := syscall.Syscall(syscall.SYS_SHMGET, 0, uintptr(size), 0777|01000)
+// 	if err != 0 {
+// 		logfile.WriteString("Ошибка вызова SYS_SHMGET")
+// 	}
 
+// 	shmaddr,_,err2 := syscall.Syscall(syscall.SYS_SHMAT, shmid, 0, 0)
+// 	if err2 != 0 {
+// 		logfile.WriteString("Ошибка вызова SYS_SHMAT")
+// 	} 
+
+// 	data := unsafe.Slice((*byte)(unsafe.Pointer(shmaddr)),size)
+	
+// 	for i:=0; i < len(data); i+=4 {
+// 		data[i] = ximg.Pix[i]
+// 	}
+
+
+// 	shmSegID,_ := shm.NewSegId(CI.Conn)
+// 	shm.Attach(CI.Conn,shmSegID,uint32(shmid),false)
+
+// 	shm.PutImage(CI.Conn, xproto.Drawable(background),gc,
+// 	uint16(CI.Screen.WidthInPixels),uint16(CI.Screen.HeightInPixels),
+// 	0,0, 
+// 	uint16(CI.Screen.WidthInPixels),uint16(CI.Screen.HeightInPixels),0,0,24,xproto.ImageFormatZPixmap,
+// 	0,shmSegID,0)
+
+// 	defer func() {
+// 		shm.Detach(CI.Conn, shmSegID)
+// 		syscall.Syscall(syscall.SYS_SHMDT, shmaddr, 0, 0)
+// 		syscall.Syscall(syscall.SYS_SHMCTL, shmid, 0, 0)
+// 	}()
+// }
+
+
+// func CreateBG(CI *ConnInfo, path string,logfile *os.File) xproto.Pixmap {
+// 	background := CreatePixelMap(CI,logfile)
+// 	gc := CreateGCtx(CI,logfile)
+// 	defer xproto.FreeGC(CI.Conn,gc)
+
+// 	img:= GetBG(path,logfile)
+// 	rimg := resizeBG(img,CI)
+// 	ximg := changeFormatBG(rimg,CI)
+// 	DrawAllBG(CI,*ximg,gc,background,logfile)
+
+// 	return  background
+// }
+
+func CreateBG(CI *ConnInfo, logfile *os.File,path string)  xproto.Pixmap{
+	img:= GetBG(path,logfile)
 	rimg := resizeBG(img,CI)
-
 	ximg := changeFormatBG(rimg,CI)
-
-	DrawAllBG(CI,*ximg,gc,background)
-
-	return  background,nil
+	ximg.XPaint(CI.Screen.Root)
+	background := CreatePixelMap(CI,logfile)
+	return background
 }
 
-func GetKeyMap(CI *ConnInfo) (*xproto.GetKeyboardMappingReply,error) {
+
+func GetKeyMap(CI *ConnInfo) *xproto.GetKeyboardMappingReply {
 	minCode := CI.Setup.MinKeycode
 	maxCode := CI.Setup.MaxKeycode
 	count := byte(maxCode - minCode + 1)
 
 	reply,err := xproto.GetKeyboardMapping(CI.Conn,minCode,count).Reply()
-	if err != nil {
-		return nil,fmt.Errorf("Ошибка %v",err)
-	}
+	Errors <- err
 
-	return reply,nil
+	return reply
 }
 
 func CheckKeyCode(CI *ConnInfo, reply *xproto.GetKeyboardMappingReply,keysum uint32) xproto.Keycode {
@@ -183,11 +236,8 @@ func CreateConnect() ConnInfo{
 	return CI
 }
 
-func ChangeScreenRoot(CI *ConnInfo) (xproto.Window,error){
-	background,err := CreateBG(CI,cfg.BackgroundPath)
- 	if err != nil {
- 		log.Printf("Ошибка! %v",err)
- 	}
+func ChangeScreenRoot(CI *ConnInfo,logfile *os.File) xproto.Window {
+	background:= CreateBG(CI,logfile,cfg.BackgroundPath)
 
 	evMask := uint32(xproto.CwBackPixmap | xproto.CwEventMask)
 	root_vallist := []uint32{
@@ -198,8 +248,7 @@ func ChangeScreenRoot(CI *ConnInfo) (xproto.Window,error){
 	xproto.ClearArea(CI.Conn,false,CI.Screen.Root,0,0,CI.Screen.WidthInPixels,CI.Screen.HeightInPixels)
 
 
-	
-	return CI.Screen.Root,nil
+	return CI.Screen.Root
 }
 
 func raiseWindow(CI *ConnInfo,wid xproto.Window)  {
@@ -207,8 +256,7 @@ func raiseWindow(CI *ConnInfo,wid xproto.Window)  {
 	valist := []uint32{
 		uint32(xproto.StackModeAbove),
 	}
-	fmt.Print("Окно!\n")
-	xproto.ConfigureWindowChecked(CI.Conn,wid,mask,valist).Check()
+	xproto.ConfigureWindow(CI.Conn,wid,mask,valist)
 }
 
 func FocusOn(CI *ConnInfo,wid xproto.Window) {
@@ -219,10 +267,12 @@ func FocusOn(CI *ConnInfo,wid xproto.Window) {
 
 
 func ConfigLoad() *config.Config{
-	cfg,err := config.LoadConfig("/home/mark/VSCodeProjects/GWM/config.yaml")
+	var err error
+	cfg,err = config.LoadConfig("/home/mark/VSCodeProjects/GWM/config.yaml")
 	if err != nil {
-		log.Fatalf("Ошибка загрузки конфига! %v",err)
+		Errors <- err
 	}
+
 	return cfg
 }
 
@@ -243,48 +293,56 @@ func ChangeNewWindowAttr(CI *ConnInfo,wid xproto.Window) {
 
 func spawn() {
 	term := exec.Command(cfg.TerminalConfig.Terminal)
-
-	term.SysProcAttr = &syscall.SysProcAttr{
-		Setsid: true,
-	}
-
-	term.ExtraFiles = nil
-	term.Env = os.Environ()
-	term.Start()
-
-	go func() {
-		term.Wait()
-	}()
+	term.Run()
 }
 
-func EventChecker(CI *ConnInfo,wid xproto.Window) {
+func EventChecker(CI *ConnInfo,wid xproto.Window,logfile *os.File) {
 	//KeyPress Callback
 	xevent.KeyPressFun(func(xu *xgbutil.XUtil, event xevent.KeyPressEvent) {
 		if event.Detail == keycode || uint16(event.State)&xproto.ModMaskShift != 0 {
+			logfile.WriteString(string(event.Detail))
 			spawn()
 		}
 	}).Connect(CI.XConn,wid)
+	
+	logfile.WriteString("Обработка нажатий включена!")
 
 	//Window Creating
 	xevent.MapRequestFun(func(xu *xgbutil.XUtil,event xevent.MapRequestEvent) {
 		ChangeNewWindowAttr(CI,event.Window)
 	}).Connect(CI.XConn,wid)
+
+	logfile.WriteString("Обработка мапреков включена!")
+}
+func Debug() {
+	logfile,_ := os.OpenFile("/home/mark/VSCodeProjects/GWM/logs.txt",os.O_WRONLY,0644)
+	defer logfile.Close()
+	for err := range Errors {
+		logfile.WriteString(err.Error())
+	}
 }
 
 func main() {
+	logfile,_ := os.OpenFile("/home/mark/VSCodeProjects/GWM/logs.txt",os.O_WRONLY,0644)
+	defer logfile.Close()
+
+	// go Debug()
+	logfile.WriteString("Дебаг Запущен!\n")
 	cfg = ConfigLoad()
+	logfile.WriteString("Конфиг загружен!\n")
 	CI := CreateConnect()
-	wid,err := ChangeScreenRoot(&CI)
-	if err != nil {
-		log.Fatal(err)
-	}
+	logfile.WriteString("Соединение установленно!\n")
+	wid := ChangeScreenRoot(&CI,logfile)
+	logfile.WriteString("Корневое окно изменено!\n")
 
-	reply,err := GetKeyMap(&CI)
-	if err != nil {
-		log.Fatal("Ошибка!",err)
-	}
-
+	reply := GetKeyMap(&CI)
+	logfile.WriteString("Кеймап получен!\n")
+	
 	keycode = CheckKeyCode(&CI,reply,cfg.TerminalConfig.TermHotKey)
-	EventChecker(&CI,wid)
+	logfile.WriteString("Кейкод получен!\n")
+	EventChecker(&CI,wid,logfile)
+	logfile.Sync()
+
+	logfile.WriteString("ЕвентЧекер включен!\n")
 	xevent.Main(CI.XConn)
 }

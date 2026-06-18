@@ -1,7 +1,6 @@
 package config
 
 import (
-	"fmt"
 	"os"
 
 	// "golang.org/x/tools/go/cfg"
@@ -31,11 +30,4 @@ func LoadConfig(filepath string) (*Config,error) {
 	}
 
 	return &cfg,nil
-}
-
-func main() {
-	cfg,err := LoadConfig("config.yaml")
-	if err != nil || cfg != nil {
-		fmt.Errorf(err.Error())
-	}
 }

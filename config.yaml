@@ -2,3 +2,4 @@ bgpath: "/home/mark/VSCodeProjects/GWM/backgrounds/bg1.jpg" #Your background ima
 termcfg:
   terminal: "kitty" #Your Terminal
   termhotkey: 0xffe3 #HotKey to open your terminal
+
