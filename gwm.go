@@ -31,16 +31,16 @@ type ConnInfo struct {
 }
 
 
-func CreatePixelMap(CI *ConnInfo,logfile *os.File) (xproto.Pixmap) {
-	background,err := xproto.NewPixmapId(CI.Conn)
-	if err != nil {
-		logfile.WriteString(err.Error())
-		Errors <- err
-		return background
-	}
-	xproto.CreatePixmap(CI.Conn, CI.Screen.RootDepth, background, xproto.Drawable(CI.Screen.Root),CI.Screen.WidthInPixels,CI.Screen.HeightInPixels)
-	return background
-}
+// func CreatePixelMap(CI *ConnInfo,logfile *os.File) (xproto.Pixmap) {
+// 	background,err := xproto.NewPixmapId(CI.Conn)
+// 	if err != nil {
+// 		logfile.WriteString(err.Error())
+// 		Errors <- err
+// 		return background
+// 	}
+// 	xproto.CreatePixmap(CI.Conn, CI.Screen.RootDepth, background, xproto.Drawable(CI.Screen.Root),CI.Screen.WidthInPixels,CI.Screen.HeightInPixels)
+// 	return background
+// }
 
 func CreateGCtx(CI *ConnInfo,logfile *os.File) xproto.Gcontext {
 	gc,err := xproto.NewGcontextId(CI.Conn)
@@ -124,13 +124,13 @@ func changeFormatBG(img image.Image,CI *ConnInfo) (*xgraphics.Image) {
 // 	return  background
 // }
 
-func CreateBG(CI *ConnInfo, logfile *os.File,path string)  xproto.Pixmap{
-	background := CreatePixelMap(CI,logfile)
+func CreateBG(CI *ConnInfo, logfile *os.File,path string) {
+	// background := CreatePixelMap(CI,logfile)
 	img:= GetBG(path,logfile)
 	rimg := resizeBG(img,CI)
 	ximg := changeFormatBG(rimg,CI)
 	ximg.XPaint(CI.Screen.Root)
-	return background
+	return 
 }
 
 
@@ -189,11 +189,11 @@ func CreateConnect() ConnInfo{
 }
 
 func ChangeScreenRoot(CI *ConnInfo,logfile *os.File) xproto.Window {
-	background:= CreateBG(CI,logfile,cfg.BackgroundPath)
+	// background:= CreateBG(CI,logfile,cfg.BackgroundPath)
 	
-	evMask := uint32(xproto.CwBackPixmap | xproto.CwEventMask)
+	evMask := uint32(xproto.CwEventMask)
 	root_vallist := []uint32{
-			uint32(background),
+			// uint32(background),
 			xproto.EventMaskExposure | xproto.EventMaskKeyPress | xproto.EventMaskSubstructureRedirect,
 		}
 	xproto.ChangeWindowAttributes(CI.Conn,CI.Screen.Root,evMask,root_vallist)
