@@ -9,7 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"sync"
-	"github.com/jezek/xgb"
+ 	"github.com/jezek/xgb"
 	// "github.com/jezek/xgb/shm"
 	"github.com/jezek/xgb/xproto"
 	"github.com/jezek/xgbutil"
@@ -32,12 +32,12 @@ type ConnInfo struct {
 
 
 func CreatePixelMap(CI *ConnInfo,logfile *os.File) (xproto.Pixmap) {
-	background,err := xproto.NewPixmapId(CI.Conn)
-	if err != nil {
-		logfile.WriteString(err.Error())
-		Errors <- err
-		return background
-	}
+	background,_ := xproto.NewPixmapId(CI.Conn)
+	// if err != nil {
+	// 	logfile.WriteString(err.Error())
+	// 	Errors <- err
+	// 	return background
+	// }
 	xproto.CreatePixmap(CI.Conn, CI.Screen.RootDepth, background, xproto.Drawable(CI.Screen.Root),CI.Screen.WidthInPixels,CI.Screen.HeightInPixels)
 	return background
 }
