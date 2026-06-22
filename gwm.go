@@ -32,12 +32,12 @@ type ConnInfo struct {
 
 
 func CreatePixelMap(CI *ConnInfo,logfile *os.File) (xproto.Pixmap) {
-	background,_ := xproto.NewPixmapId(CI.Conn)
-	// if err != nil {
-	// 	logfile.WriteString(err.Error())
-	// 	Errors <- err
-	// 	return background
-	// }
+	background,err := xproto.NewPixmapId(CI.Conn)
+	if err != nil {
+		logfile.WriteString(err.Error())
+		Errors <- err
+		return background
+	}
 	xproto.CreatePixmap(CI.Conn, CI.Screen.RootDepth, background, xproto.Drawable(CI.Screen.Root),CI.Screen.WidthInPixels,CI.Screen.HeightInPixels)
 	return background
 }
@@ -325,22 +325,22 @@ func main() {
 	defer logfile.Close()
 
 	// go Debug()
-	logfile.WriteString("Дебаг Запущен!\n")
+	logfile.WriteString("Debug On!\n")
 	cfg = ConfigLoad()
-	logfile.WriteString("Конфиг загружен!\n")
+	logfile.WriteString("Config Load!\n")
 	CI := CreateConnect()
-	logfile.WriteString("Соединение установленно!\n")
+	logfile.WriteString("Connection Up!\n")
 	wid := ChangeScreenRoot(&CI,logfile)
-	logfile.WriteString("Корневое окно изменено!\n")
+	logfile.WriteString("Root Screnn Changed!\n")
 
 	reply := GetKeyMap(&CI)
-	logfile.WriteString("Кеймап получен!\n")
+	logfile.WriteString("Get Keymap!\n")
 	
 	keycode = CheckKeyCode(&CI,reply,cfg.TerminalConfig.TermHotKey)
-	logfile.WriteString("Кейкод получен!\n")
+	logfile.WriteString("Get KeyCode!\n")
 	EventChecker(&CI,wid,logfile)
 	logfile.Sync()
 
-	logfile.WriteString("ЕвентЧекер включен!\n")
+	logfile.WriteString("EventChecker On!\n")
 	xevent.Main(CI.XConn)
 }
