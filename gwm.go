@@ -278,22 +278,22 @@ func main() {
 	defer logfile.Close()
 
 	// go Debug()
-	// logfile.WriteString("Debug On!\n")
+	logfile.WriteString("Debug On!\n")
 	cfg = ConfigLoad()
-	// logfile.WriteString("Config Load!\n")
+	logfile.WriteString("Config Load!\n")
 	CI := CreateConnect()
-	// logfile.WriteString("Connection Up!\n")
+	logfile.WriteString("Connection Up!\n")
 	wid := ChangeScreenRoot(&CI,logfile)
-	// logfile.WriteString("Root Screnn Changed!\n")
+	logfile.WriteString("Root Screnn Changed!\n")
 
 	reply := GetKeyMap(&CI)
-	// logfile.WriteString("Get Keymap!\n")
+	logfile.WriteString("Get Keymap!\n")
 	
-	keycode = CheckKeyCode(&CI,reply,cfg.TerminalConfig.TermHotKey)
-	// logfile.WriteString("Get KeyCode!\n")
+	keycode = CheckKeyCode(&CI,reply,0xffe3)
+	logfile.WriteString("Get KeyCode!\n")
 	EventChecker(&CI,wid,logfile)
 	logfile.Sync()
 
-	// logfile.WriteString("EventChecker On!\n")
+	logfile.WriteString("EventChecker On!\n")
 	xevent.Main(CI.XConn)
 }
