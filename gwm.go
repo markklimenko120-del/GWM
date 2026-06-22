@@ -267,7 +267,7 @@ func EventChecker(CI *ConnInfo,wid xproto.Window,logfile *os.File) {
 	logfile.WriteString("Обработка мапреков включена!")
 }
 func Debug() {
-	logfile,_ := os.OpenFile("/home/mark/VSCodeProjects/GWM/logs.txt",os.O_WRONLY,0644)
+	logfile,_ := os.OpenFile("~/GWM/logs.txt",os.O_WRONLY,0644)
 	defer logfile.Close()
 	for err := range Errors {
 		logfile.WriteString(err.Error())
@@ -275,7 +275,7 @@ func Debug() {
 }
 
 func main() {
-	logfile,_ := os.OpenFile("/home/mark/VSCodeProjects/GWM/logs.txt",os.O_WRONLY,0644)
+	logfile,_ := os.OpenFile("~/GWM/logs.txt",os.O_WRONLY,0644)
 	defer logfile.Close()
 
 	// go Debug()
