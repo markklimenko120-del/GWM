@@ -220,7 +220,7 @@ func FocusOn(CI *ConnInfo,wid xproto.Window) {
 
 func ConfigLoad() *config.Config{
 	var err error
-	cfg,err = config.LoadConfig("/home/mark/VSCodeProjects/GWM/config.yaml")
+	cfg,err = config.LoadConfig("~/GWM/config.yaml")
 	if err != nil {
 		Errors <- err
 	}
