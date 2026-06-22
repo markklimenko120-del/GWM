@@ -111,52 +111,6 @@ func changeFormatBG(img image.Image,CI *ConnInfo) (*xgraphics.Image) {
 // 	wg.Wait()
 // }
 
-//func PutImage(CI *ConnInfo,ximg []uint8,y int16, gc xproto.Gcontext,background xproto.Pixmap,logfile *os.File)
-
-// func initSHM(CI *ConnInfo,logfile *os.File) {
-// 	err := shm.Init(CI.Conn)
-// 	if err != nil {
-// 		logfile.WriteString("Ошибка инициализации SHM!")
-// 	}
-// 	return
-// }
-
-// func createSHM(CI *ConnInfo, background xproto.Pixmap, gc xproto.Gcontext, logfile *os.File, ximg *xgraphics.Image) {
-// 	size := CI.Screen.WidthInPixels * CI.Screen.HeightInPixels * 4
-// 	shmid, _, err := syscall.Syscall(syscall.SYS_SHMGET, 0, uintptr(size), 0777|01000)
-// 	if err != 0 {
-// 		logfile.WriteString("Ошибка вызова SYS_SHMGET")
-// 	}
-
-// 	shmaddr,_,err2 := syscall.Syscall(syscall.SYS_SHMAT, shmid, 0, 0)
-// 	if err2 != 0 {
-// 		logfile.WriteString("Ошибка вызова SYS_SHMAT")
-// 	} 
-
-// 	data := unsafe.Slice((*byte)(unsafe.Pointer(shmaddr)),size)
-	
-// 	for i:=0; i < len(data); i+=4 {
-// 		data[i] = ximg.Pix[i]
-// 	}
-
-
-// 	shmSegID,_ := shm.NewSegId(CI.Conn)
-// 	shm.Attach(CI.Conn,shmSegID,uint32(shmid),false)
-
-// 	shm.PutImage(CI.Conn, xproto.Drawable(background),gc,
-// 	uint16(CI.Screen.WidthInPixels),uint16(CI.Screen.HeightInPixels),
-// 	0,0, 
-// 	uint16(CI.Screen.WidthInPixels),uint16(CI.Screen.HeightInPixels),0,0,24,xproto.ImageFormatZPixmap,
-// 	0,shmSegID,0)
-
-// 	defer func() {
-// 		shm.Detach(CI.Conn, shmSegID)
-// 		syscall.Syscall(syscall.SYS_SHMDT, shmaddr, 0, 0)
-// 		syscall.Syscall(syscall.SYS_SHMCTL, shmid, 0, 0)
-// 	}()
-// }
-
-
 // func CreateBG(CI *ConnInfo, path string,logfile *os.File) xproto.Pixmap {
 // 	background := CreatePixelMap(CI,logfile)
 // 	gc := CreateGCtx(CI,logfile)
@@ -171,11 +125,11 @@ func changeFormatBG(img image.Image,CI *ConnInfo) (*xgraphics.Image) {
 // }
 
 func CreateBG(CI *ConnInfo, logfile *os.File,path string)  xproto.Pixmap{
+	background := CreatePixelMap(CI,logfile)
 	img:= GetBG(path,logfile)
 	rimg := resizeBG(img,CI)
 	ximg := changeFormatBG(rimg,CI)
 	ximg.XPaint(CI.Screen.Root)
-	background := CreatePixelMap(CI,logfile)
 	return background
 }
 
@@ -236,7 +190,7 @@ func CreateConnect() ConnInfo{
 
 func ChangeScreenRoot(CI *ConnInfo,logfile *os.File) xproto.Window {
 	background:= CreateBG(CI,logfile,cfg.BackgroundPath)
-
+	
 	evMask := uint32(xproto.CwBackPixmap | xproto.CwEventMask)
 	root_vallist := []uint32{
 			uint32(background),
